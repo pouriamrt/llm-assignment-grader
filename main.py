@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from tqdm.asyncio import tqdm
 
+from ai_grader.analyzer import analyze_outputs, format_stats_report
 from ai_grader.grader import grade_assignment_async
 from ai_grader.grader.grader import load_grading_prompt
 from ai_grader.logging_config import configure_logging
@@ -134,6 +135,41 @@ def main(
     asyncio.run(run_grading())
 
     logger.info("Grading complete")
+
+
+@app.command()
+def analyze(
+    output: Path = typer.Option(
+        None,
+        "--output",
+        "-o",
+        path_type=Path,
+        help="Output directory containing feedback files",
+    ),
+    save: bool = typer.Option(
+        False,
+        "--save",
+        "-s",
+        help="Save stats report to output/stats.md",
+    ),
+) -> None:
+    """Analyze grading outputs and display statistics."""
+    project_root = Path(__file__).resolve().parent
+    output_dir = output or project_root / "output"
+
+    if not output_dir.exists():
+        typer.echo(f"Output directory not found: {output_dir}", err=True)
+        raise typer.Exit(1)
+
+    result = analyze_outputs(output_dir)
+    report = format_stats_report(result, output_dir)
+
+    typer.echo(report)
+
+    if save:
+        stats_path = output_dir / "stats.md"
+        stats_path.write_text(report, encoding="utf-8")
+        typer.echo(f"\nStats saved to {stats_path}")
 
 
 if __name__ == "__main__":

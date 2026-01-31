@@ -126,6 +126,16 @@ uv run python main.py -l DEBUG
 
 Feedback is written to `output/<folder_name>_feedback.md` for each submission.
 
+### Analyze grading stats (run after grading)
+
+```bash
+uv run python main.py analyze
+uv run python main.py analyze -o output
+uv run python main.py analyze --save   # also save stats to output/stats.md
+```
+
+Shows: mean/median/min/max scores, std dev, score distribution, and error count.
+
 ---
 
 ## Supported File Types
