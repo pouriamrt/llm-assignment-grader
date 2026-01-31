@@ -5,10 +5,12 @@ from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
+from loguru import logger
 from tqdm.asyncio import tqdm
 
 from ai_grader.grader import grade_assignment_async
 from ai_grader.grader.grader import load_grading_prompt
+from ai_grader.logging_config import configure_logging
 from ai_grader.scanner import scan_assignments
 
 app = typer.Typer(help="Grade assignments using AI")
@@ -30,7 +32,9 @@ async def _grade_one(
             feedback = await grade_assignment_async(assignment["context"], grading_prompt)
             output_path = output_dir / f"{name}_feedback.md"
             output_path.write_text(feedback, encoding="utf-8")
+            logger.debug("Graded {} -> {}", name, output_path)
         except Exception as e:
+            logger.error("Grading failed for {name}: {err}", name=name, err=e)
             error_path = output_dir / f"{name}_error.txt"
             error_path.write_text(str(e), encoding="utf-8")
             pbar.write(f"Error ({name}): {e}")
@@ -69,12 +73,19 @@ def main(
         help="Max concurrent grading tasks",
         min=1,
     ),
+    log_level: str = typer.Option(
+        "INFO",
+        "--log-level",
+        "-l",
+        help="Logging level (DEBUG, INFO, WARNING, ERROR)",
+    ),
 ) -> None:
     """Grade assignments using AI."""
     if ctx.invoked_subcommand is not None:
         return
 
     load_dotenv()
+    configure_logging(level=log_level.upper())
 
     project_root = Path(__file__).resolve().parent
     data_folder = data or project_root / "data"
@@ -82,25 +93,25 @@ def main(
     output_dir = output or project_root / "output"
 
     if not data_folder.exists():
-        typer.echo(f"Data folder not found: {data_folder}", err=True)
+        logger.error("Data folder not found: {}", data_folder)
         example = project_root / "data_example"
         if example.exists():
-            typer.echo("Try: python main.py --data data_example", err=True)
+            logger.info("Try: python main.py --data data_example")
         else:
-            typer.echo("Create a 'data' folder and add subfolders (one per submission).", err=True)
+            logger.info("Create a 'data' folder and add subfolders (one per submission).")
         raise typer.Exit(1)
 
     if not prompt_file.exists():
-        typer.echo(f"Grading prompt not found: {prompt_file}", err=True)
-        typer.echo("Create prompts/grading_prompt.md with your grading criteria.", err=True)
+        logger.error("Grading prompt not found: {}", prompt_file)
+        logger.info("Create prompts/grading_prompt.md with your grading criteria.")
         raise typer.Exit(1)
 
     grading_prompt = load_grading_prompt(prompt_file)
     assignments = scan_assignments(data_folder)
 
     if not assignments:
-        typer.echo("No assignments found in data folder.")
-        typer.echo(
+        logger.warning("No assignments found in data folder")
+        logger.info(
             "Add subfolders under data/ with supported files "
             "(PDF, DOCX, PPTX, .py, .txt, .md, etc)."
         )
@@ -109,7 +120,7 @@ def main(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     n = len(assignments)
-    print(f"Found {n} assignment(s). Grading with concurrency={concurrency}...\n")
+    logger.info("Found {} assignment(s), grading with concurrency={}", n, concurrency)
 
     semaphore = asyncio.Semaphore(concurrency)
 
@@ -122,7 +133,7 @@ def main(
 
     asyncio.run(run_grading())
 
-    print("\nGrading complete.")
+    logger.info("Grading complete")
 
 
 if __name__ == "__main__":

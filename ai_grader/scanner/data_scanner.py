@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from loguru import logger
+
 from ai_grader.loaders import load_documents_from_folder
 
 
@@ -21,6 +23,7 @@ def scan_assignments(data_folder: Path) -> list[dict]:
     """
     data_path = Path(data_folder)
     if not data_path.is_dir():
+        logger.warning("Data path is not a directory: {}", data_path)
         return []
 
     results: list[dict] = []
@@ -31,6 +34,7 @@ def scan_assignments(data_folder: Path) -> list[dict]:
 
         files = load_documents_from_folder(item, recursive=True)
         if not files:
+            logger.debug("Skipping empty folder: {}", item.name)
             continue
 
         # Build (relative_path, content) and combined context
@@ -52,5 +56,7 @@ def scan_assignments(data_folder: Path) -> list[dict]:
                 "context": context,
             }
         )
+        logger.debug("Scanned {} ({} files)", item.name, len(file_entries))
 
+    logger.info("Scanned {} assignment(s) from {}", len(results), data_path)
     return results

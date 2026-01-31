@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from loguru import logger
 from tqdm import tqdm
 
 from ai_grader.loaders.formats import (
@@ -22,7 +23,8 @@ def load_document(file_path: Path) -> str | None:
     """
     try:
         return extract_text_from_file(file_path)
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to load {}: {}", file_path, e)
         return None
 
 

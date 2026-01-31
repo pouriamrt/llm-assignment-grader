@@ -20,3 +20,6 @@ output/
 
 # My prompts
 my_prompts/
+
+# Logs
+logs/

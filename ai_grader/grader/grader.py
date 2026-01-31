@@ -5,6 +5,7 @@ from pathlib import Path
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from loguru import logger
 
 
 def _get_llm(
@@ -26,6 +27,7 @@ def _get_llm(
     if provider == "openai" or (provider == "auto" and not key):
         key = key or os.getenv("OPENAI_API_KEY")
         if key:
+            logger.debug("Using OpenAI LLM")
             return ChatOpenAI(
                 model=model or "gpt-5.2",
                 api_key=key,
@@ -35,12 +37,14 @@ def _get_llm(
     if provider == "anthropic" or (provider == "auto" and not key):
         key = key or os.getenv("ANTHROPIC_API_KEY")
         if key:
+            logger.debug("Using Anthropic LLM")
             return ChatAnthropic(
                 model=model or "claude-sonnet-4-20250514",
                 api_key=key,
                 temperature=0,
             )
 
+    logger.error("No LLM API key found (OPENAI_API_KEY or ANTHROPIC_API_KEY)")
     raise ValueError(
         "No LLM API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env or environment."
     )

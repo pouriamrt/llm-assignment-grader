@@ -51,7 +51,11 @@ AI_Grader/
 
    You can copy `data_example` to `data` for a quick test.
 
-4. **Edit grading prompt**: Customize `prompts/grading_prompt.md` with your criteria.
+4. **Edit grading prompt**: Customize `prompts/grading_prompt.md` or use one from `my_prompts/`:
+
+   ```bash
+   python main.py -p my_prompts/stretchy_words_regex_assignment.md
+   ```
 
 ## Usage
 
@@ -71,6 +75,14 @@ Control concurrency (default: 5):
 python main.py --concurrency 3
 # or
 python main.py -j 10
+```
+
+Logging level (default: INFO):
+
+```bash
+python main.py --log-level DEBUG
+# or
+python main.py -l WARNING
 ```
 
 Output is written to `output/<folder_name>_feedback.md` for each submission.
