@@ -1,0 +1,145 @@
+"""Grade assignments using LangChain and an LLM."""
+
+from pathlib import Path
+
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+
+
+def _get_llm(
+    provider: str = "auto",
+    model: str | None = None,
+    api_key: str | None = None,
+):
+    """
+    Create an LLM instance. Uses OPENAI_API_KEY or ANTHROPIC_API_KEY from env.
+
+    Args:
+        provider: "openai", "anthropic", or "auto" (tries OpenAI first, then Anthropic).
+        model: Model name (optional; uses defaults if not set).
+        api_key: Override API key (optional).
+    """
+    import os
+
+    key = api_key
+    if provider == "openai" or (provider == "auto" and not key):
+        key = key or os.getenv("OPENAI_API_KEY")
+        if key:
+            return ChatOpenAI(
+                model=model or "gpt-5.2",
+                api_key=key,
+                temperature=0,
+            )
+
+    if provider == "anthropic" or (provider == "auto" and not key):
+        key = key or os.getenv("ANTHROPIC_API_KEY")
+        if key:
+            return ChatAnthropic(
+                model=model or "claude-sonnet-4-20250514",
+                api_key=key,
+                temperature=0,
+            )
+
+    raise ValueError(
+        "No LLM API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env or environment."
+    )
+
+
+def grade_assignment(
+    context: str,
+    grading_prompt: str,
+    *,
+    provider: str = "auto",
+    model: str | None = None,
+) -> str:
+    """
+    Grade a single assignment using the LLM.
+
+    Args:
+        context: Combined content of all submission files.
+        grading_prompt: User-defined grading instructions (from markdown).
+        provider: "openai", "anthropic", or "auto".
+        model: Model name override.
+
+    Returns:
+        LLM grading response (text).
+    """
+    llm = _get_llm(provider=provider, model=model)
+
+    system = (
+        "You are an expert grader. Grade the student's assignment according to the "
+        "grading criteria and instructions provided. Be thorough, concise, fair, and constructive. "
+        "Provide clear feedback and a grade/score if the instructions ask for one."
+    )
+
+    user_content = f"""## Grading Instructions
+
+{grading_prompt}
+
+---
+
+## Student Submission (all files combined)
+
+{context}
+"""
+
+    messages = [
+        SystemMessage(content=system),
+        HumanMessage(content=user_content),
+    ]
+
+    response = llm.invoke(messages)
+    return response.content if hasattr(response, "content") else str(response)
+
+
+async def grade_assignment_async(
+    context: str,
+    grading_prompt: str,
+    *,
+    provider: str = "auto",
+    model: str | None = None,
+) -> str:
+    """
+    Grade a single assignment using the LLM (async).
+
+    Args:
+        context: Combined content of all submission files.
+        grading_prompt: User-defined grading instructions (from markdown).
+        provider: "openai", "anthropic", or "auto".
+        model: Model name override.
+
+    Returns:
+        LLM grading response (text).
+    """
+    llm = _get_llm(provider=provider, model=model)
+
+    system = (
+        "You are an expert grader. Grade the student's assignment according to the "
+        "grading criteria and instructions provided. Be thorough, concise, fair, and constructive. "
+        "Provide clear feedback and a grade/score if the instructions ask for one."
+    )
+
+    user_content = f"""## Grading Instructions
+
+{grading_prompt}
+
+---
+
+## Student Submission (all files combined)
+
+{context}
+"""
+
+    messages = [
+        SystemMessage(content=system),
+        HumanMessage(content=user_content),
+    ]
+
+    response = await llm.ainvoke(messages)
+    return response.content if hasattr(response, "content") else str(response)
+
+
+def load_grading_prompt(prompt_path: Path) -> str:
+    """Load grading prompt from a markdown file."""
+    return prompt_path.read_text(encoding="utf-8").strip()

@@ -14,3 +14,9 @@ wheels/
 
 # Data files
 data/
+
+# Output files
+output/
+
+# My prompts
+my_prompts/
