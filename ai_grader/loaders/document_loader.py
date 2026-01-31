@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from loguru import logger
-from tqdm import tqdm
 
 from ai_grader.loaders.formats import (
     SUPPORTED_EXTENSIONS,
@@ -45,7 +44,7 @@ def load_documents_from_folder(
     results: list[tuple[Path, str]] = []
 
     pattern = "**/*" if recursive else "*"
-    for file_path in tqdm(folder_path.glob(pattern), desc="Loading documents"):
+    for file_path in folder_path.glob(pattern):
         if not file_path.is_file():
             continue
         if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from loguru import logger
+from tqdm import tqdm
 
 from ai_grader.loaders import load_documents_from_folder
 
@@ -28,7 +29,7 @@ def scan_assignments(data_folder: Path) -> list[dict]:
 
     results: list[dict] = []
 
-    for item in sorted(data_path.iterdir()):
+    for item in tqdm(sorted(data_path.iterdir()), desc="Scanning data folder", unit="folder"):
         if not item.is_dir():
             continue
 
