@@ -11,6 +11,7 @@ from tqdm.asyncio import tqdm
 from ai_grader.analyzer import analyze_outputs, format_stats_report
 from ai_grader.grader import grade_assignment_async
 from ai_grader.grader.grader import load_grading_prompt
+from ai_grader.guardrails import apply_grade_guardrails
 from ai_grader.logging_config import configure_logging
 from ai_grader.scanner import scan_assignments
 
@@ -31,6 +32,7 @@ async def _grade_one(
 
         try:
             feedback = await grade_assignment_async(assignment["context"], grading_prompt)
+            feedback = apply_grade_guardrails(feedback, min_grade=1.0, max_grade=2.0)
             output_path = output_dir / f"{name}_feedback.md"
             output_path.write_text(feedback, encoding="utf-8")
             logger.debug("Graded {} -> {}", name, output_path)
