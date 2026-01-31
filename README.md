@@ -1,105 +1,147 @@
 # AI Grader
 
-AI-powered assignment grader that reads various file formats from a `data` folder, combines them into context, and uses an LLM to grade each submission based on a custom prompt in a markdown file.
+> Grade assignments at scale using AI. Drop submissions into folders, define your rubric in Markdown, and let the LLM do the rest.
+
+---
 
 ## Features
 
-- **Multi-format support**: PDF, DOCX, PPTX, Python, text, Markdown, JSON, HTML, CSV, YAML, Jupyter notebooks, and more
-- **Folder-based submissions**: Each subfolder under `data/` is treated as one assignment (e.g., one per student)
-- **Custom grading prompt**: Define grading criteria in `prompts/grading_prompt.md`
-- **LangChain integration**: Uses LangChain with OpenAI or Anthropic (Claude)
+| Feature | Description |
+|--------|-------------|
+| **Multi-format** | PDF, DOCX, PPTX, Python, text, Markdown, JSON, HTML, CSV, YAML, Jupyter notebooks |
+| **Folder-based** | One subfolder per submission—simple and flexible |
+| **Custom rubrics** | Write grading criteria in Markdown; use different prompts per assignment |
+| **Async & fast** | Concurrent grading with configurable limits |
+| **LLM-ready** | LangChain with OpenAI or Anthropic (Claude) |
+
+---
+
+## Quick Start
+
+```bash
+# 1. Install (requires uv: https://docs.astral.sh/uv/)
+uv sync
+
+# 2. Add your API key to .env
+echo "OPENAI_API_KEY=sk-..." >> .env   # or ANTHROPIC_API_KEY
+
+# 3. Run (uses data/ and prompts/grading_prompt.md by default)
+uv run python main.py
+```
+
+---
 
 ## Project Structure
 
 ```
 AI_Grader/
-├── ai_grader/
-│   ├── loaders/       # Document loaders (PDF, DOCX, PPTX, etc.)
-│   ├── scanner/       # Scans data folder, builds context
-│   └── grader/        # LLM grading logic
-├── data/              # Put assignment subfolders here (one per submission)
-├── data_example/      # Example structure (copy to data/ for testing)
+├── ai_grader/              # Core package
+│   ├── loaders/            # Extract text from PDF, DOCX, PPTX, etc.
+│   ├── scanner/            # Scan data folder, build context per submission
+│   └── grader/             # LLM grading logic
+├── data/                   # 📁 Put submission subfolders here
+├── data_example/           # Sample structure for testing
 ├── prompts/
-│   └── grading_prompt.md   # Your grading criteria
-├── output/            # Grading feedback (written here)
-├── main.py            # Entry point
+│   └── grading_prompt.md   # Default grading criteria
+├── my_prompts/             # Assignment-specific prompts
+├── output/                 # Feedback files written here
+├── main.py                 # Entry point
 └── pyproject.toml
 ```
 
+---
+
 ## Setup
 
-1. **Install dependencies** (from project root):
+### 1. Install dependencies
 
-   ```bash
-   pip install -e .
-   ```
+[uv](https://docs.astral.sh/uv/) is required. Install it, then from the project root:
 
-2. **Set API key** in `.env`:
+```bash
+uv sync
+```
 
-   ```
-   OPENAI_API_KEY=sk-...    # or
-   ANTHROPIC_API_KEY=sk-ant-...
-   ```
+### 2. Configure API key
 
-   The grader uses OpenAI by default if `OPENAI_API_KEY` is set, otherwise Anthropic.
+Create a `.env` file in the project root:
 
-3. **Prepare data**:
+```
+OPENAI_API_KEY=sk-...
+# or
+ANTHROPIC_API_KEY=sk-ant-...
+```
 
-   - Create a `data` folder
-   - Add one subfolder per submission (e.g., `data/student_01/`, `data/student_02/`)
-   - Put all files for each submission in that folder (recursive)
+The grader prefers OpenAI when `OPENAI_API_KEY` is set; otherwise it uses Anthropic.
 
-   You can copy `data_example` to `data` for a quick test.
+### 3. Prepare submissions
 
-4. **Edit grading prompt**: Customize `prompts/grading_prompt.md` or use one from `my_prompts/`:
+- Create a `data/` folder
+- Add one subfolder per submission (e.g. `data/student_01/`, `data/student_02/`)
+- Place all files for each submission in that folder (subfolders are scanned recursively)
 
-   ```bash
-   python main.py -p my_prompts/stretchy_words_regex_assignment.md
-   ```
+Use `data_example/` as a reference, or copy it to `data/` for a quick test.
+
+### 4. Choose a grading prompt
+
+- Default: `prompts/grading_prompt.md`
+- Or use an assignment-specific prompt:
+
+  ```bash
+  uv run python main.py -p my_prompts/my_grading_prompt.md
+  ```
+
+---
 
 ## Usage
 
-```bash
-python main.py
-```
-
-With custom paths:
+### Basic
 
 ```bash
-python main.py --data data_example --prompt prompts/grading_prompt.md --output output
+uv run python main.py
 ```
 
-Control concurrency (default: 5):
+### CLI options
+
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `--data` | `-d` | `./data` | Folder with submission subfolders |
+| `--prompt` | `-p` | `./prompts/grading_prompt.md` | Grading criteria (Markdown) |
+| `--output` | `-o` | `./output` | Where to write feedback files |
+| `--concurrency` | `-j` | `5` | Max concurrent grading tasks |
+| `--log-level` | `-l` | `INFO` | Logging level: DEBUG, INFO, WARNING, ERROR |
+
+### Examples
 
 ```bash
-python main.py --concurrency 3
-# or
-python main.py -j 10
+# Test with sample data
+uv run python main.py -d data_example
+
+# Custom paths and 10 concurrent workers
+uv run python main.py -d ./submissions -o ./grades -j 10
+
+# Verbose logging
+uv run python main.py -l DEBUG
 ```
 
-Logging level (default: INFO):
+Feedback is written to `output/<folder_name>_feedback.md` for each submission.
 
-```bash
-python main.py --log-level DEBUG
-# or
-python main.py -l WARNING
-```
-
-Output is written to `output/<folder_name>_feedback.md` for each submission.
+---
 
 ## Supported File Types
 
-| Extension | Format          |
-|----------|-----------------|
-| .pdf     | PDF             |
-| .docx    | Word            |
-| .pptx    | PowerPoint      |
-| .py      | Python          |
-| .txt, .md| Text / Markdown |
-| .json, .yaml, .yml | Config      |
-| .html, .htm, .xml | Web / XML   |
-| .csv     | CSV             |
-| .ipynb   | Jupyter notebook|
+| Extension | Format |
+|-----------|--------|
+| `.pdf` | PDF |
+| `.docx` | Word |
+| `.pptx` | PowerPoint |
+| `.py` | Python |
+| `.txt`, `.md` | Text, Markdown |
+| `.json`, `.yaml`, `.yml` | Config |
+| `.html`, `.htm`, `.xml` | Web, XML |
+| `.csv` | CSV |
+| `.ipynb` | Jupyter notebook |
+
+---
 
 ## License
 
