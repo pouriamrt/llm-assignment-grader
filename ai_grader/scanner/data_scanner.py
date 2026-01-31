@@ -1,11 +1,28 @@
 """Scan data folder and collect assignment content for grading."""
 
+import zipfile
 from pathlib import Path
 
 from loguru import logger
 from tqdm import tqdm
 
 from ai_grader.loaders import load_documents_from_folder
+
+
+def _unzip_in_folder(folder_path: Path) -> None:
+    """Unzip any .zip files in folder (and subfolders), delete zips after extracting."""
+    while True:
+        zips = list(folder_path.rglob("*.zip"))
+        if not zips:
+            break
+        for z in zips:
+            try:
+                with zipfile.ZipFile(z, "r") as zf:
+                    zf.extractall(z.parent)
+                z.unlink()
+                logger.debug("Extracted and removed {}", z.name)
+            except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError) as e:
+                logger.warning("Failed to unzip {}: {}", z.name, e)
 
 
 def scan_assignments(data_folder: Path) -> list[dict]:
@@ -33,6 +50,7 @@ def scan_assignments(data_folder: Path) -> list[dict]:
         if not item.is_dir():
             continue
 
+        _unzip_in_folder(item)
         files = load_documents_from_folder(item, recursive=True)
         if not files:
             logger.debug("Skipping empty folder: {}", item.name)

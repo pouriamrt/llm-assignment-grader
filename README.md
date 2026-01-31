@@ -78,6 +78,7 @@ The grader prefers OpenAI when `OPENAI_API_KEY` is set; otherwise it uses Anthro
 - Create a `data/` folder
 - Add one subfolder per submission (e.g. `data/student_01/`, `data/student_02/`)
 - Place all files for each submission in that folder (subfolders are scanned recursively)
+- **ZIP files:** Any `.zip` in a submission folder is extracted automatically, then the zip is removed. Extracted files are used for grading.
 
 Use `data_example/` as a reference, or copy it to `data/` for a quick test.
 
