@@ -4,11 +4,19 @@ import re
 from pathlib import Path
 from statistics import mean, median, stdev
 
+# Matches x/y or x.y/z (decimals) - avoids matching "5/2" from "1.5/2"
+_SCORE_PATTERN = re.compile(r"(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)")
 
-def _parse_score(text: str) -> tuple[float, float] | None:
+
+def _parse_score(
+    text: str,
+    *,
+    clamp_out_of_2: bool = True,
+) -> tuple[float, float] | None:
     """
     Extract total score from feedback text.
     Looks for Total row with x/y format. Returns (score, out_of) or None.
+    Supports decimals: 1.5/2, 0.5/1.
     """
     score = None
     out_of = None
@@ -17,21 +25,23 @@ def _parse_score(text: str) -> tuple[float, float] | None:
         line_lower = line.lower()
         if "total" not in line_lower:
             continue
-        m = re.search(r"(\d+)/(\d+)", line)
+        m = _SCORE_PATTERN.search(line)
         if m:
             score = float(m.group(1))
             out_of = float(m.group(2))
             break
 
     if score is None:
-        # Fallback: last x/y in file
-        matches = list(re.finditer(r"(\d+)/(\d+)", text))
+        # Fallback: last x/y in file (typically the Total row)
+        matches = list(_SCORE_PATTERN.finditer(text))
         if matches:
             m = matches[-1]
             score = float(m.group(1))
             out_of = float(m.group(2))
 
     if score is not None and out_of is not None and out_of > 0:
+        if clamp_out_of_2 and abs(out_of - 2) < 0.01:
+            score = max(1.0, min(2.0, score))
         return (score, out_of)
     return None
 
@@ -89,12 +99,17 @@ def analyze_outputs(output_dir: Path) -> dict:
         stats["std_dev"] = round(stdev(raw_scores), 2) if len(raw_scores) > 1 else 0
         stats["out_of"] = out_of_values[0] if len(out_of_values) == 1 else out_of_values
 
-        # Distribution by score
+        # Distribution by score (preserve 1.5, 1, 2 etc.)
         dist: dict[str, int] = {}
         for s, o, _ in scores:
-            key = f"{int(s)}/{int(o)}"
+            score_str = f"{s:.1f}".rstrip("0").rstrip(".")
+            key = f"{score_str}/{int(o)}"
             dist[key] = dist.get(key, 0) + 1
-        stats["distribution"] = dict(sorted(dist.items(), reverse=True))
+
+        def _sort_key(item: tuple[str, int]) -> float:
+            return -float(item[0].split("/")[0])
+
+        stats["distribution"] = dict(sorted(dist.items(), key=_sort_key))
 
     return {
         "graded": len(scores),
