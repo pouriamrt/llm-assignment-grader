@@ -1,0 +1,13 @@
+Stretchy Words - Submission (text only)
+
+Requirements: Count how many query words can be extended to match string S.
+Extension rule: a group of the same letter can be extended only if the final group has size >= 3.
+
+I did not submit code. My approach would be:
+1. Run-length encode S and each word.
+2. For each word, check that each (char, count) group can match the corresponding group in S:
+   - either same count, or S's count >= 3 and word's count <= S's count.
+
+FSA: Would be deterministic, one state per "group" we're matching.
+
+I ran out of time to implement. Sorry.

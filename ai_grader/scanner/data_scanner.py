@@ -49,6 +49,8 @@ def scan_assignments(data_folder: Path) -> list[dict]:
     for item in tqdm(sorted(data_path.iterdir()), desc="Scanning data folder", unit="folder"):
         if not item.is_dir():
             continue
+        if item.name == "Archive":
+            continue
 
         _unzip_in_folder(item)
         files = load_documents_from_folder(item, recursive=True)
