@@ -122,16 +122,28 @@ def main(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    n = len(assignments)
-    logger.info("Found {} assignment(s), grading with concurrency={}", n, concurrency)
+    # Skip assignments that already have a feedback file; process if missing or only error file
+    def should_grade(a: dict) -> bool:
+        name = a["folder_name"]
+        feedback_path = output_dir / f"{name}_feedback.md"
+        return not feedback_path.exists()
+
+    to_grade = [a for a in assignments if should_grade(a)]
+    skipped = len(assignments) - len(to_grade)
+    if skipped:
+        logger.info("Skipping {} assignment(s) with existing feedback", skipped)
+    if not to_grade:
+        logger.info("Nothing to grade (all have existing output)")
+        return
+
+    n = len(to_grade)
+    logger.info("Found {} assignment(s) to grade (concurrency={})", n, concurrency)
 
     semaphore = asyncio.Semaphore(concurrency)
 
     async def run_grading() -> None:
         with tqdm(total=n, desc="Grading", unit="submission") as pbar:
-            tasks = [
-                _grade_one(a, grading_prompt, output_dir, semaphore, pbar) for a in assignments
-            ]
+            tasks = [_grade_one(a, grading_prompt, output_dir, semaphore, pbar) for a in to_grade]
             await asyncio.gather(*tasks)
 
     asyncio.run(run_grading())

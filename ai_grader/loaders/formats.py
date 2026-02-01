@@ -78,8 +78,35 @@ def _read_text(path: Path) -> str:
     raise last_error or UnicodeDecodeError("unknown", b"", 0, 1, "")
 
 
+# Notebook extraction limits to avoid filling context with non-essential content
+_MAX_MARKDOWN_LINES = 25  # Keep first N lines of long markdown; rest truncated
+_MAX_MARKDOWN_CHARS = 1200  # Or truncate by chars (whichever hits first)
+_MAX_CODE_LINES = 800  # Truncate very long code cells with a note
+
+
+def _truncate_text(text: str, max_lines: int, max_chars: int, label: str = "truncated") -> str:
+    """Truncate text to max_lines and max_chars; append a short note if truncated."""
+    lines = text.splitlines()
+    if len(lines) <= max_lines and len(text) <= max_chars:
+        return text
+    head_lines = lines[:max_lines]
+    head = "\n".join(head_lines)
+    if len(head) > max_chars:
+        head = (
+            head[: max_chars - 50].rsplit("\n", 1)[0]
+            if "\n" in head[: max_chars - 50]
+            else head[: max_chars - 50]
+        )
+    return head.rstrip() + f"\n\n[... {label} for context ...]"
+
+
 def _read_ipynb(path: Path) -> str:
-    """Extract code and markdown from Jupyter notebook."""
+    """Extract code and markdown from Jupyter notebook, truncating long non-code content.
+
+    - Code cells: included in full (or truncated if extremely long) for grading.
+    - Markdown/raw cells: truncated when long so instructions and prose do not fill context.
+    - Cell outputs are not included (they would bloat context with plots, data, etc.).
+    """
     import json
 
     nb = json.loads(path.read_text(encoding="utf-8"))
@@ -87,8 +114,38 @@ def _read_ipynb(path: Path) -> str:
     for cell in nb.get("cells", []):
         cell_type = cell.get("cell_type", "")
         source = "".join(cell.get("source", []))
-        if source.strip():
+        if not source.strip():
+            continue
+
+        if cell_type == "code":
+            lines = source.splitlines()
+            if len(lines) > _MAX_CODE_LINES:
+                head = "\n".join(lines[:_MAX_CODE_LINES])
+                source = (
+                    head
+                    + f"\n\n[... code truncated ({len(lines) - _MAX_CODE_LINES} more lines) ...]"
+                )
             parts.append(f"[{cell_type}]\n{source}")
+
+        elif cell_type in ("markdown", "raw"):
+            truncated = _truncate_text(
+                source,
+                max_lines=_MAX_MARKDOWN_LINES,
+                max_chars=_MAX_MARKDOWN_CHARS,
+                label="markdown truncated",
+            )
+            parts.append(f"[{cell_type}]\n{truncated}")
+
+        else:
+            # Unknown cell type: include but truncate
+            truncated = _truncate_text(
+                source,
+                max_lines=_MAX_MARKDOWN_LINES,
+                max_chars=_MAX_MARKDOWN_CHARS,
+                label="cell truncated",
+            )
+            parts.append(f"[{cell_type}]\n{truncated}")
+
     return "\n\n".join(parts)
 
 
