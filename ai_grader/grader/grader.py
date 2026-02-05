@@ -1,11 +1,21 @@
-"""Grade assignments using LangChain and an LLM."""
+"""Grade assignments using LangChain and an LLM (text + images, multimodal)."""
 
+import os
 from pathlib import Path
+from typing import Any
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from loguru import logger
+
+_SYSTEM_PROMPT = (
+    "You are an expert grader. Grade the student's assignment according to the "
+    "grading criteria and instructions provided. Be thorough, concise, fair, and constructive. "
+    "Provide clear feedback and a grade/score if the instructions ask for one. "
+    "When images are included, consider them as part of the submission "
+    "(e.g. diagrams, screenshots)."
+)
 
 
 def _get_llm(
@@ -21,8 +31,6 @@ def _get_llm(
         model: Model name (optional; uses defaults if not set).
         api_key: Override API key (optional).
     """
-    import os
-
     key = api_key
     if provider == "openai" or (provider == "auto" and not key):
         key = key or os.getenv("OPENAI_API_KEY")
@@ -50,18 +58,37 @@ def _get_llm(
     )
 
 
+def _build_user_content(
+    context: str | list[dict[str, Any]], grading_prompt: str
+) -> str | list[dict[str, Any]]:
+    """Build user message content: string for text-only, list of parts for multimodal."""
+    header = f"""## Grading Instructions
+
+{grading_prompt}
+
+---
+
+## Student Submission (all files combined)
+
+"""
+    if isinstance(context, list) and context:
+        return [{"type": "text", "text": header}, *context]
+    return header + (context if isinstance(context, str) else "").strip()
+
+
 def grade_assignment(
-    context: str,
+    context: str | list[dict[str, Any]],
     grading_prompt: str,
     *,
     provider: str = "auto",
     model: str | None = None,
 ) -> str:
     """
-    Grade a single assignment using the LLM.
+    Grade a single assignment using the LLM (supports text and images).
 
     Args:
-        context: Combined content of all submission files.
+        context: Combined content of all submission files: either a string (text only)
+            or a list of multimodal content parts (text + image_url) for the LLM.
         grading_prompt: User-defined grading instructions (from markdown).
         provider: "openai", "anthropic", or "auto".
         model: Model name override.
@@ -70,45 +97,27 @@ def grade_assignment(
         LLM grading response (text).
     """
     llm = _get_llm(provider=provider, model=model)
-
-    system = (
-        "You are an expert grader. Grade the student's assignment according to the "
-        "grading criteria and instructions provided. Be thorough, concise, fair, and constructive. "
-        "Provide clear feedback and a grade/score if the instructions ask for one."
-    )
-
-    user_content = f"""## Grading Instructions
-
-{grading_prompt}
-
----
-
-## Student Submission (all files combined)
-
-{context}
-"""
-
+    user_content = _build_user_content(context, grading_prompt)
     messages = [
-        SystemMessage(content=system),
+        SystemMessage(content=_SYSTEM_PROMPT),
         HumanMessage(content=user_content),
     ]
-
     response = llm.invoke(messages)
     return response.content if hasattr(response, "content") else str(response)
 
 
 async def grade_assignment_async(
-    context: str,
+    context: str | list[dict[str, Any]],
     grading_prompt: str,
     *,
     provider: str = "auto",
     model: str | None = None,
 ) -> str:
     """
-    Grade a single assignment using the LLM (async).
+    Grade a single assignment using the LLM (async; supports text and images).
 
     Args:
-        context: Combined content of all submission files.
+        context: Combined content: string (text only) or list of multimodal parts.
         grading_prompt: User-defined grading instructions (from markdown).
         provider: "openai", "anthropic", or "auto".
         model: Model name override.
@@ -117,29 +126,11 @@ async def grade_assignment_async(
         LLM grading response (text).
     """
     llm = _get_llm(provider=provider, model=model)
-
-    system = (
-        "You are an expert grader. Grade the student's assignment according to the "
-        "grading criteria and instructions provided. Be thorough, concise, fair, and constructive. "
-        "Provide clear feedback and a grade/score if the instructions ask for one."
-    )
-
-    user_content = f"""## Grading Instructions
-
-{grading_prompt}
-
----
-
-## Student Submission (all files combined)
-
-{context}
-"""
-
+    user_content = _build_user_content(context, grading_prompt)
     messages = [
-        SystemMessage(content=system),
+        SystemMessage(content=_SYSTEM_PROMPT),
         HumanMessage(content=user_content),
     ]
-
     response = await llm.ainvoke(messages)
     return response.content if hasattr(response, "content") else str(response)
 

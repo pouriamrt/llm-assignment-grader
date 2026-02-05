@@ -18,6 +18,11 @@ from ai_grader.scanner import scan_assignments
 app = typer.Typer(help="Grade assignments using AI")
 
 
+def _get_submission_content(assignment: dict):
+    """Return multimodal content_parts if present, else text context."""
+    return assignment.get("content_parts") or assignment["context"]
+
+
 async def _grade_one(
     assignment: dict,
     grading_prompt: str,
@@ -31,7 +36,8 @@ async def _grade_one(
         pbar.set_postfix_str(name, refresh=True)
 
         try:
-            feedback = await grade_assignment_async(assignment["context"], grading_prompt)
+            content = _get_submission_content(assignment)
+            feedback = await grade_assignment_async(content, grading_prompt)
             feedback = apply_grade_guardrails(feedback, min_grade=1.0, max_grade=2.0)
             output_path = output_dir / f"{name}_feedback.md"
             output_path.write_text(feedback, encoding="utf-8")

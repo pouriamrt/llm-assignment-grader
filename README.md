@@ -9,6 +9,7 @@
 | Feature | Description |
 |--------|-------------|
 | **Multi-format** | PDF, DOCX, PPTX, Python, text, Markdown, JSON, HTML, CSV, YAML, Jupyter notebooks |
+| **Multimodal** | Images (PNG, JPEG, GIF, WebP, BMP) are read and sent to the LLM with text |
 | **Folder-based** | One subfolder per submission—simple and flexible |
 | **Custom rubrics** | Write grading criteria in Markdown; use different prompts per assignment |
 | **Async & fast** | Concurrent grading with configurable limits |
@@ -36,7 +37,7 @@ uv run python main.py
 ```
 AI_Grader/
 ├── ai_grader/              # Core package
-│   ├── loaders/            # Extract text from PDF, DOCX, PPTX, etc.
+│   ├── loaders/            # Extract text and images (multimodal) from files
 │   ├── scanner/            # Scan data folder, build context per submission
 │   └── grader/             # LLM grading logic
 ├── data/                   # 📁 Put submission subfolders here
@@ -151,6 +152,7 @@ Shows: mean/median/min/max scores, std dev, score distribution, and error count.
 | `.html`, `.htm`, `.xml` | Web, XML |
 | `.csv` | CSV |
 | `.ipynb` | Jupyter notebook |
+| `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp` | Images (sent to LLM as multimodal input) |
 
 ---
 

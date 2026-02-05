@@ -1,7 +1,8 @@
-"""Scan data folder and collect assignment content for grading."""
+"""Scan data folder and collect assignment content for grading (text + images, multimodal)."""
 
 import zipfile
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 from tqdm import tqdm
@@ -36,8 +37,9 @@ def scan_assignments(data_folder: Path) -> list[dict]:
         List of dicts with keys:
           - folder_name: Name of the subfolder (e.g., student_id)
           - folder_path: Full path to the subfolder
-          - files: List of (relative_path, content) tuples
-          - context: Combined text of all files for LLM
+          - files: List of (relative_path, content_parts) tuples
+          - context: Combined text of all files (text-only, fallback)
+          - content_parts: List of multimodal parts (text + images) for the LLM
     """
     data_path = Path(data_folder)
     if not data_path.is_dir():
@@ -58,23 +60,26 @@ def scan_assignments(data_folder: Path) -> list[dict]:
             logger.debug("Skipping empty folder: {}", item.name)
             continue
 
-        # Build (relative_path, content) and combined context
-        file_entries: list[tuple[str, str]] = []
+        file_entries: list[tuple[str, list[dict[str, Any]]]] = []
         context_parts: list[str] = []
+        all_content_parts: list[dict[str, Any]] = []
 
-        for file_path, content in files:
+        for file_path, parts in files:
             rel = str(file_path.relative_to(item))
-            file_entries.append((rel, content))
-            context_parts.append(f"=== FILE: {rel} ===\n\n{content}")
+            file_entries.append((rel, parts))
+            for part in parts:
+                all_content_parts.append(part)
+                if part.get("type") == "text" and part.get("text"):
+                    context_parts.append(part["text"])
 
         context = "\n\n".join(context_parts)
-
         results.append(
             {
                 "folder_name": item.name,
                 "folder_path": item,
                 "files": file_entries,
                 "context": context,
+                "content_parts": all_content_parts,
             }
         )
         logger.debug("Scanned {} ({} files)", item.name, len(file_entries))
