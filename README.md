@@ -80,6 +80,7 @@ The grader prefers OpenAI when `OPENAI_API_KEY` is set; otherwise it uses Anthro
 - Add one subfolder per submission (e.g. `data/student_01/`, `data/student_02/`)
 - Place all files for each submission in that folder (subfolders are scanned recursively)
 - **ZIP files:** Any `.zip` in a submission folder is extracted automatically, then the zip is removed. Extracted files are used for grading.
+- **Excluding files:** Put a `.graderignore` or `.gitignore` in a submission folder (gitignore-style patterns). You can also use `--exclude` / `-x` to add patterns from the CLI.
 
 Use `data_example/` as a reference, or copy it to `data/` for a quick test.
 
@@ -111,6 +112,7 @@ uv run python main.py
 | `--output` | `-o` | `./output` | Where to write feedback files |
 | `--concurrency` | `-j` | `5` | Max concurrent grading tasks |
 | `--log-level` | `-l` | `INFO` | Logging level: DEBUG, INFO, WARNING, ERROR |
+| `--exclude` | `-x` | *(none)* | Gitignore-style pattern to exclude (can repeat). Also uses `.graderignore` and `.gitignore` in each submission folder. |
 
 ### Examples
 
@@ -123,9 +125,17 @@ uv run python main.py -d ./submissions -o ./grades -j 10
 
 # Verbose logging
 uv run python main.py -l DEBUG
+
+# Exclude files/folders (gitignore-style)
+uv run python main.py -x "*.pyc" -x "__pycache__" -x "*.log"
 ```
 
 Feedback is written to `output/<folder_name>_feedback.md` for each submission.
+
+### Excluding files and folders
+
+- **Per submission:** Put a `.graderignore` or `.gitignore` file in a submission folder. Use standard gitignore syntax (e.g. `__pycache__/`, `*.pyc`, `notes.txt`). Matching files and folders are skipped when building context.
+- **From CLI:** Use `--exclude` / `-x` to add patterns that apply to all submissions (e.g. `-x "*.pyc" -x "__pycache__"`).
 
 ### Analyze grading stats (run after grading)
 

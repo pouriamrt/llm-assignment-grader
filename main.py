@@ -88,6 +88,13 @@ def main(
         "-l",
         help="Logging level (DEBUG, INFO, WARNING, ERROR)",
     ),
+    exclude: list[str] = typer.Option(
+        [],
+        "--exclude",
+        "-x",
+        help="Gitignore-style pattern to exclude files/folders (can repeat)."
+        "Also uses .graderignore and .gitignore in each submission folder.",
+    ),
 ) -> None:
     """Grade assignments using AI."""
     if ctx.invoked_subcommand is not None:
@@ -116,7 +123,7 @@ def main(
         raise typer.Exit(1)
 
     grading_prompt = load_grading_prompt(prompt_file)
-    assignments = scan_assignments(data_folder)
+    assignments = scan_assignments(data_folder, exclude_patterns=exclude or None)
 
     if not assignments:
         logger.warning("No assignments found in data folder")

@@ -26,12 +26,19 @@ def _unzip_in_folder(folder_path: Path) -> None:
                 logger.warning("Failed to unzip {}: {}", z.name, e)
 
 
-def scan_assignments(data_folder: Path) -> list[dict]:
+def scan_assignments(
+    data_folder: Path,
+    exclude_patterns: list[str] | None = None,
+) -> list[dict]:
     """
     Scan the data folder: each subfolder is treated as one assignment submission.
 
+    Excludes files/folders matching .graderignore and .gitignore in each submission
+    folder, plus any extra exclude_patterns (gitignore-style).
+
     Args:
         data_folder: Path to the data folder (e.g., ./data).
+        exclude_patterns: Additional gitignore-style patterns (e.g. from --exclude).
 
     Returns:
         List of dicts with keys:
@@ -47,6 +54,7 @@ def scan_assignments(data_folder: Path) -> list[dict]:
         return []
 
     results: list[dict] = []
+    extra = exclude_patterns or []
 
     for item in tqdm(sorted(data_path.iterdir()), desc="Scanning data folder", unit="folder"):
         if not item.is_dir():
@@ -55,7 +63,7 @@ def scan_assignments(data_folder: Path) -> list[dict]:
             continue
 
         _unzip_in_folder(item)
-        files = load_documents_from_folder(item, recursive=True)
+        files = load_documents_from_folder(item, recursive=True, exclude_patterns=extra)
         if not files:
             logger.debug("Skipping empty folder: {}", item.name)
             continue
