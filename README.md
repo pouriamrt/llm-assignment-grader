@@ -80,7 +80,7 @@ The grader prefers OpenAI when `OPENAI_API_KEY` is set; otherwise it uses Anthro
 - Add one subfolder per submission (e.g. `data/student_01/`, `data/student_02/`)
 - Place all files for each submission in that folder (subfolders are scanned recursively)
 - **ZIP files:** Any `.zip` in a submission folder is extracted automatically, then the zip is removed. Extracted files are used for grading.
-- **Excluding files:** Put a `.graderignore` or `.gitignore` in a submission folder (gitignore-style patterns). You can also use `--exclude` / `-x` to add patterns from the CLI.
+- **Excluding files:** Put a `.graderignore` or `.gitignore` in the **data folder** (global, applies to all submissions) and/or in **each submission folder**. Use gitignore-style patterns. You can also use `--exclude` / `-x` to add patterns from the CLI.
 
 Use `data_example/` as a reference, or copy it to `data/` for a quick test.
 
@@ -134,7 +134,8 @@ Feedback is written to `output/<folder_name>_feedback.md` for each submission.
 
 ### Excluding files and folders
 
-- **Per submission:** Put a `.graderignore` or `.gitignore` file in a submission folder. Use standard gitignore syntax (e.g. `__pycache__/`, `*.pyc`, `notes.txt`). Matching files and folders are skipped when building context.
+- **Global (data folder):** Put a `.graderignore` or `.gitignore` in the **data folder** (the one containing submission subfolders). Its patterns apply to every submission.
+- **Per submission:** Put a `.graderignore` or `.gitignore` in a **submission folder**. Use standard gitignore syntax (e.g. `__pycache__/`, `*.pyc`, `notes.txt`). Matching files and folders are skipped when building context.
 - **From CLI:** Use `--exclude` / `-x` to add patterns that apply to all submissions (e.g. `-x "*.pyc" -x "__pycache__"`).
 
 ### Analyze grading stats (run after grading)

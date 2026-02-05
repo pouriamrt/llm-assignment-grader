@@ -8,6 +8,21 @@ from loguru import logger
 from tqdm import tqdm
 
 from ai_grader.loaders import load_documents_from_folder
+from ai_grader.loaders.document_loader import DEFAULT_IGNORE_FILES
+
+
+def _read_ignore_lines(folder_path: Path) -> list[str]:
+    """Read gitignore-style lines from .graderignore and .gitignore in folder_path."""
+    lines: list[str] = []
+    for name in DEFAULT_IGNORE_FILES:
+        path = folder_path / name
+        if path.is_file():
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+                lines.extend(content.splitlines())
+            except OSError as e:
+                logger.debug("Could not read {}: {}", path, e)
+    return lines
 
 
 def _unzip_in_folder(folder_path: Path) -> None:
@@ -33,8 +48,10 @@ def scan_assignments(
     """
     Scan the data folder: each subfolder is treated as one assignment submission.
 
-    Excludes files/folders matching .graderignore and .gitignore in each submission
-    folder, plus any extra exclude_patterns (gitignore-style).
+    Excludes files/folders matching:
+    - Global .graderignore and .gitignore in the data folder (applies to all submissions)
+    - Per-submission .graderignore and .gitignore in each submission folder
+    - Any extra exclude_patterns (e.g. from --exclude).
 
     Args:
         data_folder: Path to the data folder (e.g., ./data).
@@ -54,7 +71,8 @@ def scan_assignments(
         return []
 
     results: list[dict] = []
-    extra = exclude_patterns or []
+    global_lines = _read_ignore_lines(data_path)
+    extra = global_lines + (exclude_patterns or [])
 
     for item in tqdm(sorted(data_path.iterdir()), desc="Scanning data folder", unit="folder"):
         if not item.is_dir():

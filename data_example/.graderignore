@@ -1,0 +1,7 @@
+# Global ignore: applies to all submission folders under this data folder (gitignore-style)
+# Uncomment or add patterns as needed:
+# __pycache__/
+# *.pyc
+# .env
+# *.log
+# *.tmp
