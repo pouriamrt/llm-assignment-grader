@@ -28,7 +28,11 @@ def _read_ignore_lines(folder_path: Path) -> list[str]:
 def _unzip_in_folder(folder_path: Path) -> None:
     """Unzip any .zip files in folder (and subfolders), delete zips after extracting."""
     while True:
-        zips = list(folder_path.rglob("*.zip"))
+        zips = [
+            z
+            for z in folder_path.rglob("*.zip")
+            if not z.name.startswith("._")  # skip macOS resource-fork / metadata files
+        ]
         if not zips:
             break
         for z in zips:
@@ -38,7 +42,11 @@ def _unzip_in_folder(folder_path: Path) -> None:
                 z.unlink()
                 logger.debug("Extracted and removed {}", z.name)
             except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError) as e:
-                logger.warning("Failed to unzip {}: {}", z.name, e)
+                logger.warning("Failed to unzip {}: {} (removing file)", z.name, e)
+                try:
+                    z.unlink()
+                except OSError:
+                    pass
 
 
 def scan_assignments(
