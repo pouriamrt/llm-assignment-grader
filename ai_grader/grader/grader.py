@@ -61,7 +61,7 @@ def _get_llm(
         if key:
             logger.debug("Using OpenAI LLM")
             return ChatOpenAI(
-                model=model or "gpt-5.2",
+                model=model or "gpt-5.4",
                 api_key=key,
                 temperature=0,
             )
