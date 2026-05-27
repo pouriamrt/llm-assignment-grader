@@ -17,7 +17,8 @@ _CONTEXT_WINDOWS: dict[str, int] = {
     "gpt-4o-mini": 128_000,
     "gpt-4.1": 128_000,
     "gpt-4.1-mini": 128_000,
-    "gpt-5.2": 128_000,
+    "gpt-5": 128_000,
+    "gpt-5.5": 800_000,
     "claude-sonnet-4-20250514": 200_000,
     "claude-sonnet-4-5-20250929": 200_000,
 }
@@ -61,7 +62,7 @@ def _get_llm(
         if key:
             logger.debug("Using OpenAI LLM")
             return ChatOpenAI(
-                model=model or "gpt-5.4",
+                model=model or "gpt-5.5",
                 api_key=key,
                 temperature=0,
             )
