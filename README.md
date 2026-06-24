@@ -14,6 +14,8 @@
 | **Custom rubrics** | Write grading criteria in Markdown; use different prompts per assignment |
 | **Async & fast** | Concurrent grading with configurable limits |
 | **LLM-ready** | LangChain with OpenAI or Anthropic (Claude) |
+| **Grade guardrails** | Total clamped into a valid range (`--min-grade`/`--max-grade`) after grading |
+| **CSV export** | `export` command turns feedback files into a per-criterion grade sheet |
 
 ---
 
@@ -113,6 +115,11 @@ uv run python main.py
 | `--concurrency` | `-j` | `5` | Max concurrent grading tasks |
 | `--log-level` | `-l` | `INFO` | Logging level: DEBUG, INFO, WARNING, ERROR |
 | `--exclude` | `-x` | *(none)* | Gitignore-style pattern to exclude (can repeat). Also uses `.graderignore` and `.gitignore` in each submission folder. |
+| `--min-grade` | | `0` | Floor for the total grade (e.g. `10` for a 10–20 rubric). Enforced after grading. |
+| `--max-grade` | | *(scale)* | Ceiling for the total grade. Defaults to the rubric's own scale; grades can never exceed it. |
+| `--provider` | | `auto` | LLM provider: `openai`, `anthropic`, or `auto`. |
+| `--model` | `-m` | *(provider default)* | Model name override. |
+| `--force` | `-f` | `false` | Re-grade submissions even if a feedback file already exists. |
 
 ### Examples
 
@@ -128,9 +135,14 @@ uv run python main.py -l DEBUG
 
 # Exclude files/folders (gitignore-style)
 uv run python main.py -x "*.pyc" -x "__pycache__" -x "*.log"
+
+# Enforce a 10-20 grade range and re-grade everything
+uv run python main.py -p my_prompts/text_clustering_grading.md --min-grade 10 --force
 ```
 
 Feedback is written to `output/<folder_name>_feedback.md` for each submission.
+
+> **Large data files** (e.g. multi-MB CSV datasets) are sampled to a preview before grading so they can't crowd the actual deliverables (notebook, report, slides) out of the model's context window. Each file's text is also capped as a backstop.
 
 ### Excluding files and folders
 
@@ -147,6 +159,18 @@ uv run python main.py analyze --save   # also save stats to output/stats.md
 ```
 
 Shows: mean/median/min/max scores, std dev, score distribution, and error count.
+
+### Export grades to a spreadsheet (run after grading)
+
+```bash
+uv run python main.py export                          # writes output/grades.csv
+uv run python main.py export -o output --dest grades.csv
+```
+
+Produces a CSV grade sheet with one row per submission and one column per rubric
+criterion (parsed from each feedback file's table), ending in the Total. Opens
+directly in Excel. Point `-o` at a single assignment's output directory so the
+columns match one rubric.
 
 ---
 

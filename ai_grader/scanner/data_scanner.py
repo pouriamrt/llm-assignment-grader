@@ -25,20 +25,43 @@ def _read_ignore_lines(folder_path: Path) -> list[str]:
     return lines
 
 
+def _safe_extract(zf: zipfile.ZipFile, dest: Path) -> None:
+    """Extract a zip, skipping entries that would escape dest (zip-slip / CWE-22).
+
+    Student-submitted archives are untrusted: an entry with an absolute path or
+    ``..`` components could otherwise write outside the submission folder.
+    """
+    dest = dest.resolve()
+    for member in zf.namelist():
+        target = (dest / member).resolve()
+        if not (target == dest or dest in target.parents):
+            logger.warning("Skipped unsafe zip entry '{}' in {}", member, dest)
+            continue
+        try:
+            zf.extract(member, dest)
+        except OSError as e:
+            # e.g. a Windows reserved name (CON, NUL) — skip the entry, keep going.
+            logger.warning("Could not extract zip entry '{}': {}", member, e)
+
+
+# Bound nested-unzip passes so a self-referential or pathological archive can't loop forever.
+_MAX_UNZIP_PASSES = 8
+
+
 def _unzip_in_folder(folder_path: Path) -> None:
     """Unzip any .zip files in folder (and subfolders), delete zips after extracting."""
-    while True:
+    for _ in range(_MAX_UNZIP_PASSES):
         zips = [
             z
             for z in folder_path.rglob("*.zip")
             if not z.name.startswith("._")  # skip macOS resource-fork / metadata files
         ]
         if not zips:
-            break
+            return
         for z in zips:
             try:
                 with zipfile.ZipFile(z, "r") as zf:
-                    zf.extractall(z.parent)
+                    _safe_extract(zf, z.parent)
                 z.unlink()
                 logger.debug("Extracted and removed {}", z.name)
             except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError) as e:
@@ -47,6 +70,14 @@ def _unzip_in_folder(folder_path: Path) -> None:
                     z.unlink()
                 except OSError:
                     pass
+    remaining = [z for z in folder_path.rglob("*.zip") if not z.name.startswith("._")]
+    if remaining:
+        logger.warning(
+            "Stopped unzipping {} after {} passes; {} zip(s) remain",
+            folder_path.name,
+            _MAX_UNZIP_PASSES,
+            len(remaining),
+        )
 
 
 def scan_assignments(

@@ -2,33 +2,39 @@
 
 import re
 
+from loguru import logger
+
+_SCORE_RE = re.compile(r"(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)")
+
 
 def _parse_total_score(text: str) -> tuple[float, float] | None:
     """Extract total (score, out_of) from feedback. Returns None if not found."""
     for line in text.splitlines():
         if "total" not in line.lower():
             continue
-        m = re.search(r"(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)", line)
+        m = _SCORE_RE.search(line)
         if m:
             return (float(m.group(1)), float(m.group(2)))
-    matches = list(re.finditer(r"(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)", text))
+    matches = list(_SCORE_RE.finditer(text))
     if matches:
         m = matches[-1]
         return (float(m.group(1)), float(m.group(2)))
     return None
 
 
-def _replace_total_in_text(text: str, new_score: float, out_of: float) -> str:
-    """Replace the Total row score in the feedback text."""
+def _fmt(score: float) -> str:
+    """Format a score without trailing zeros: 16.0 -> '16', 18.5 -> '18.5'."""
+    return f"{score:g}"
 
-    # Match Total row: | **Total** | **2/2** | or | Total | 2/2 |
+
+def _replace_total_in_text(text: str, new_score: float, out_of: float) -> str:
+    """Replace the Total row score in the feedback text, preserving bold style."""
+
     def repl(m: re.Match) -> str:
-        prefix = m.group(1)
-        suffix = m.group(2)
-        # Preserve bold style if present
-        if "**" in prefix or "**" in text[m.start() : m.end()]:
-            return f"{prefix}**{new_score:.1f}/{out_of:.0f}**{suffix}"
-        return f"{prefix}{new_score:.1f}/{out_of:.0f}{suffix}"
+        prefix, suffix = m.group(1), m.group(2)
+        if "**" in m.group(0):
+            return f"{prefix}**{_fmt(new_score)}/{_fmt(out_of)}**{suffix}"
+        return f"{prefix}{_fmt(new_score)}/{_fmt(out_of)}{suffix}"
 
     pattern = r"(\|\s*.*?Total.*?\|\s*)\*{0,2}\d+(?:\.\d+)?/\d+(?:\.\d+)?\*{0,2}(\s*\|)"
     return re.sub(pattern, repl, text, count=1, flags=re.IGNORECASE)
@@ -37,27 +43,44 @@ def _replace_total_in_text(text: str, new_score: float, out_of: float) -> str:
 def apply_grade_guardrails(
     feedback: str,
     *,
-    min_grade: float = 1.0,
-    max_grade: float = 2.0,
-    out_of: float | None = 2.0,
+    min_grade: float = 0.0,
+    max_grade: float | None = None,
+    out_of: float | None = None,
 ) -> str:
     """
-    Ensure total grade is valid: within [min_grade, max_grade].
-    Only applies when total is out of 2 (or specified out_of).
+    Clamp the total grade into a valid range and rewrite it in the feedback.
+
+    The total's scale (out_of) is read from the feedback itself, so this works
+    for any rubric (e.g. /20, /100). The clamp is [min_grade, upper] where
+    upper = min(max_grade, scale) — a grade can never exceed its own scale.
+
+    Args:
+        feedback: Raw LLM feedback markdown.
+        min_grade: Lower bound / floor (e.g. 10 for a 10-20 rubric).
+        max_grade: Upper bound; if None, the detected scale is used.
+        out_of: If set, only apply when the detected scale matches this value.
+
+    Returns:
+        Feedback with the Total clamped, or unchanged if no total is found or
+        it is already in range.
     """
     parsed = _parse_total_score(feedback)
     if not parsed:
         return feedback
 
-    score, parsed_out_of = parsed
-    if parsed_out_of <= 0:
+    score, scale = parsed
+    if scale <= 0:
+        return feedback
+    if out_of is not None and abs(scale - out_of) > 0.01:
         return feedback
 
-    # Only apply when scale matches (e.g. out of 2)
-    if out_of is not None and abs(parsed_out_of - out_of) > 0.01:
-        return feedback
-
-    clamped = max(min_grade, min(max_grade, score))
-    if clamped != score:
-        return _replace_total_in_text(feedback, clamped, parsed_out_of)
+    if min_grade > scale:
+        logger.warning(
+            "min_grade={} exceeds rubric scale={}; clamping floor to scale", min_grade, scale
+        )
+    upper = min(max_grade, scale) if max_grade is not None else scale
+    lower = min(min_grade, upper)
+    clamped = max(lower, min(upper, score))
+    if abs(clamped - score) > 1e-9:
+        return _replace_total_in_text(feedback, clamped, scale)
     return feedback

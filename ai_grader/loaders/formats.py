@@ -23,6 +23,12 @@ SUPPORTED_EXTENSIONS = {
     ".ipynb",
 }
 
+# A single data file (e.g. a multi-MB CSV) must not crowd the deliverables
+# (notebook, report, slides) out of the LLM context. CSVs are sampled to a
+# preview; every file's text is capped as a backstop.
+MAX_CSV_PREVIEW_ROWS = 50
+MAX_TEXT_CHARS = 50_000
+
 # Image extensions supported for multimodal LLM input
 IMAGE_EXTENSIONS = {
     ".png",
@@ -106,6 +112,53 @@ def _read_text(path: Path) -> str:
         except UnicodeDecodeError as e:
             last_error = e
     raise last_error or UnicodeDecodeError("unknown", b"", 0, 1, "")
+
+
+def _read_first_lines(path: Path, n: int) -> tuple[list[str], bool]:
+    """Read up to n lines with encoding fallback. Returns (lines, more_remain).
+
+    Reads at most n lines so a multi-GB file is never loaded into memory.
+    """
+    for enc in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
+        try:
+            lines: list[str] = []
+            with path.open("r", encoding=enc) as fh:
+                for i, line in enumerate(fh):
+                    if i >= n:
+                        return lines, True
+                    lines.append(line.rstrip("\n"))
+            return lines, False
+        except UnicodeDecodeError:
+            continue
+    # latin-1 never raises, so this is unreachable; satisfy the type checker.
+    return [], False
+
+
+def _read_csv(path: Path) -> str:
+    """Read a CSV as a bounded preview: header + first MAX_CSV_PREVIEW_ROWS rows.
+
+    Large datasets are sampled so a multi-MB data file can't dominate the LLM
+    context and crowd out the actual deliverables (notebook, report, slides).
+    The grader only needs a sample to judge data choice/labels/cleaning.
+    """
+    lines, more = _read_first_lines(path, MAX_CSV_PREVIEW_ROWS + 1)  # +1 for header
+    text = "\n".join(lines)
+    if not more:
+        return text
+    return (
+        f"{text}\n\n[CSV preview: showing first {MAX_CSV_PREVIEW_ROWS} data rows; "
+        f"remaining rows omitted to fit grading context.]"
+    )
+
+
+def _cap_text(text: str, path: Path) -> str:
+    """Backstop: cap any single file's text so it can't dominate the context."""
+    if len(text) <= MAX_TEXT_CHARS:
+        return text
+    return (
+        text[:MAX_TEXT_CHARS]
+        + f"\n\n[File '{path.name}' truncated to {MAX_TEXT_CHARS} characters.]"
+    )
 
 
 def _read_ipynb(path: Path) -> str:
@@ -270,17 +323,21 @@ def extract_text_from_file(file_path: Path) -> str:
     ext = path.suffix.lower()
 
     if ext == ".pdf":
-        return _read_pdf(path)
-    if ext == ".docx":
-        return _read_docx(path)
-    if ext == ".pptx":
-        return _read_pptx(path)
-    if ext == ".ipynb":
-        return _read_ipynb(path)
-    if ext in SUPPORTED_EXTENSIONS:
-        return _read_text(path)
+        text = _read_pdf(path)
+    elif ext == ".docx":
+        text = _read_docx(path)
+    elif ext == ".pptx":
+        text = _read_pptx(path)
+    elif ext == ".ipynb":
+        text = _read_ipynb(path)
+    elif ext == ".csv":
+        text = _read_csv(path)
+    elif ext in SUPPORTED_EXTENSIONS:
+        text = _read_text(path)
+    else:
+        raise ValueError(f"Unsupported file format: {ext}")
 
-    raise ValueError(f"Unsupported file format: {ext}")
+    return _cap_text(text, path)
 
 
 def extract_content_parts_from_file(file_path: Path) -> list[dict[str, Any]]:
@@ -326,10 +383,14 @@ def extract_content_parts_from_file(file_path: Path) -> list[dict[str, Any]]:
     elif ext == ".ipynb":
         text = _read_ipynb(path)
         embedded = _extract_images_from_ipynb(path)
+    elif ext == ".csv":
+        text = _read_csv(path)
+        embedded = []
     else:
-        text = extract_text_from_file(path)
+        text = _read_text(path)  # capped once below
         embedded = []
 
+    text = _cap_text(text, path)
     parts: list[dict[str, Any]] = [{"type": "text", "text": file_label + text}]
     for i, (raw, mime) in enumerate(embedded):
         label = f"\n[Image {i + 1} from {path.name}]\n"

@@ -9,6 +9,7 @@ from loguru import logger
 from tqdm.asyncio import tqdm
 
 from ai_grader.analyzer import analyze_outputs, format_stats_report
+from ai_grader.exporter import export_grades
 from ai_grader.grader import grade_assignment_async
 from ai_grader.grader.grader import load_grading_prompt
 from ai_grader.guardrails import apply_grade_guardrails
@@ -29,6 +30,11 @@ async def _grade_one(
     output_dir: Path,
     semaphore: asyncio.Semaphore,
     pbar: tqdm,
+    *,
+    min_grade: float,
+    max_grade: float | None,
+    provider: str,
+    model: str | None,
 ) -> None:
     """Grade a single assignment with semaphore-limited concurrency."""
     async with semaphore:
@@ -37,10 +43,15 @@ async def _grade_one(
 
         try:
             content = _get_submission_content(assignment)
-            feedback = await grade_assignment_async(content, grading_prompt)
-            feedback = apply_grade_guardrails(feedback, min_grade=1.0, max_grade=2.0)
+            feedback = await grade_assignment_async(
+                content, grading_prompt, provider=provider, model=model
+            )
+            feedback = apply_grade_guardrails(feedback, min_grade=min_grade, max_grade=max_grade)
             output_path = output_dir / f"{name}_feedback.md"
             output_path.write_text(feedback, encoding="utf-8")
+            # Clear any stale error file from a previous failed run.
+            error_path = output_dir / f"{name}_error.txt"
+            error_path.unlink(missing_ok=True)
             logger.debug("Graded {} -> {}", name, output_path)
         except Exception as e:
             logger.error("Grading failed for {name}: {err}", name=name, err=e)
@@ -95,6 +106,33 @@ def main(
         help="Gitignore-style pattern to exclude files/folders (can repeat)."
         "Also uses .graderignore and .gitignore in each submission folder.",
     ),
+    min_grade: float = typer.Option(
+        0.0,
+        "--min-grade",
+        help="Floor for the total grade (e.g. 10 for a 10-20 rubric).",
+    ),
+    max_grade: float | None = typer.Option(
+        None,
+        "--max-grade",
+        help="Ceiling for the total grade (default: the rubric's own scale).",
+    ),
+    provider: str = typer.Option(
+        "auto",
+        "--provider",
+        help="LLM provider: 'openai', 'anthropic', or 'auto'.",
+    ),
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="Model name override (default: provider's configured model).",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Re-grade submissions even if a feedback file already exists.",
+    ),
 ) -> None:
     """Grade assignments using AI."""
     if ctx.invoked_subcommand is not None:
@@ -135,8 +173,11 @@ def main(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Skip assignments that already have a feedback file; process if missing or only error file
+    # Skip assignments that already have a feedback file (unless --force);
+    # always process those with only an error file.
     def should_grade(a: dict) -> bool:
+        if force:
+            return True
         name = a["folder_name"]
         feedback_path = output_dir / f"{name}_feedback.md"
         return not feedback_path.exists()
@@ -156,7 +197,20 @@ def main(
 
     async def run_grading() -> None:
         with tqdm(total=n, desc="Grading", unit="submission") as pbar:
-            tasks = [_grade_one(a, grading_prompt, output_dir, semaphore, pbar) for a in to_grade]
+            tasks = [
+                _grade_one(
+                    a,
+                    grading_prompt,
+                    output_dir,
+                    semaphore,
+                    pbar,
+                    min_grade=min_grade,
+                    max_grade=max_grade,
+                    provider=provider,
+                    model=model,
+                )
+                for a in to_grade
+            ]
             await asyncio.gather(*tasks)
 
     asyncio.run(run_grading())
@@ -197,6 +251,38 @@ def analyze(
         stats_path = output_dir / "stats.md"
         stats_path.write_text(report, encoding="utf-8")
         typer.echo(f"\nStats saved to {stats_path}")
+
+
+@app.command()
+def export(
+    output: Path = typer.Option(
+        None,
+        "--output",
+        "-o",
+        path_type=Path,
+        help="Output directory containing feedback files",
+    ),
+    dest: Path = typer.Option(
+        None,
+        "--dest",
+        path_type=Path,
+        help="Destination CSV file (default: <output>/grades.csv)",
+    ),
+) -> None:
+    """Export feedback files to a CSV grade sheet (a row per submission, a column per criterion)."""
+    project_root = Path(__file__).resolve().parent
+    output_dir = output or project_root / "output"
+
+    if not output_dir.exists():
+        typer.echo(f"Output directory not found: {output_dir}", err=True)
+        raise typer.Exit(1)
+
+    csv_path = dest or output_dir / "grades.csv"
+    count = export_grades(output_dir, csv_path)
+    if count == 0:
+        typer.echo("No feedback files with a parseable rubric found.", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"Exported {count} submission(s) to {csv_path}")
 
 
 if __name__ == "__main__":
